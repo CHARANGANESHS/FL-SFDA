@@ -1,5 +1,7 @@
 import torch
 import torch.nn.functional as F
+import matplotlib.pyplot as plt
+import numpy as np
 
 class GradCAM:
     def __init__(self, model):
@@ -37,3 +39,47 @@ class GradCAM:
             cams.append(cam)
         cams = torch.stack(cams, dim=0)
         return logits, cams
+
+
+def visualize_gradcam(model, loader, device, title_prefix="Model"):
+    gradcam=GradCAM(model)
+    model.eval()
+    images,labels,_=next(iter(loader))
+    images=images.to(device)
+    labels=labels.to(device)
+
+    with torch.no_grad():
+        logits,_=model(images)
+        preds=logits.argmax(dim=1)
+
+    logits,cams=gradcam(images)
+    cam0=cams[0].cpu().detach().numpy()
+
+    import torch.nn.functional as F2
+    cam0_up=F2.interpolate(
+        torch.tensor(cam0).unsqueeze(0).unsqueeze(0),
+        size=(224,224),mode='bilinear',align_corners=False
+    ).squeeze().numpy()
+
+    img0=images[0].cpu().detach().numpy().transpose(1,2,0)
+    img0=np.clip(img0,0,1)
+
+    plt.figure(figsize=(10,4))
+    plt.suptitle(f"{title_prefix} Grad-CAM\nLabel={labels[0].item()}, Pred={preds[0].item()}")
+    plt.subplot(1,3,1)
+    plt.title("Original")
+    plt.imshow(img0)
+    plt.axis('off')
+
+    plt.subplot(1,3,2)
+    plt.title("CAM Heatmap")
+    plt.imshow(cam0_up,cmap='jet')
+    plt.axis('off')
+
+    plt.subplot(1,3,3)
+    plt.title("Overlay")
+    plt.imshow(img0,alpha=0.6)
+    plt.imshow(cam0_up,cmap='jet',alpha=0.4)
+    plt.axis('off')
+    plt.show()
+
